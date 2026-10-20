@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { HouseState, HouseMember, CleaningDuty, Department, MissedReasonItem, ActivityItem } from './src/types.js';
 import { computeCleaningAssignments, getCalendarWeek } from './src/types.js';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +13,21 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'house_state.json');
+const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+if (!serviceAccountJson) {
+  throw new Error('Missing FIREBASE_SERVICE_ACCOUNT environment variable');
+}
+
+const serviceAccount = JSON.parse(serviceAccountJson);
+
+const firebaseApp =
+  getApps().length > 0
+    ? getApps()[0]
+    : initializeApp({ credential: cert(serviceAccount) });
+
+const db = getFirestore(firebaseApp);
+const houseStateRef = db.collection('appData').doc('houseState');
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -108,40 +125,62 @@ function createInitialState(): HouseState {
   };
 }
 
-let state: HouseState = (() => {
+let state: HouseState = createInitialState();
+
+async function loadState(): Promise<void> {
+  const snapshot = await houseStateRef.get();
+
+  if (snapshot.exists) {
+    const savedData = snapshot.data();
+
+    if (savedData?.state) {
+      state = savedData.state as HouseState;
+      return;
+    }
+  }
+
   if (fs.existsSync(STATE_FILE)) {
     try {
       const data = fs.readFileSync(STATE_FILE, 'utf-8');
       const parsed = JSON.parse(data);
-      // Ensure Gunateja, Naveen, aditya M, aditya exist
-      const hasGuna = parsed.members && parsed.members.some((m: HouseMember) => m.name.toLowerCase().includes('guna'));
-      if (!hasGuna) {
-        const s = createInitialState();
-        fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
-        return s;
-      }
-      return parsed;
-    } catch {
-      const s = createInitialState();
-      fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
-      return s;
-    }
-  } else {
-    const s = createInitialState();
-    fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
-    return s;
-  }
-})();
 
-function saveState() {
+      const hasGuna =
+        parsed.members &&
+        parsed.members.some((m: HouseMember) =>
+          m.name.toLowerCase().includes('guna')
+        );
+
+      state = hasGuna ? parsed : createInitialState();
+    } catch {
+      state = createInitialState();
+    }
+  }
+
+  await saveState();
+}
+
+async function saveState(): Promise<void> {
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    const snapshot = JSON.parse(JSON.stringify(state)) as HouseState;
+
+    await houseStateRef.set({
+      state: snapshot,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Keep a local backup too.
+    try {
+      fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    } catch (err) {
+      console.error('Failed to save local backup:', err);
+    }
   } catch (err) {
-    console.error('Failed to save house state', err);
+    console.error('Failed to save house state to Firestore:', err);
+    throw err;
   }
 }
 
-function syncCalendarWeekIfNeeded() {
+async function syncCalendarWeekIfNeeded(): Promise<void> {
   const BASE_SUNDAY = new Date('2026-10-18T00:00:00.000Z').getTime();
   const now = Date.now();
   const diffDays = Math.floor((now - BASE_SUNDAY) / (1000 * 60 * 60 * 24));
@@ -206,11 +245,12 @@ function syncCalendarWeekIfNeeded() {
       timestamp: new Date().toISOString(),
     });
 
-    saveState();
+    await saveState();
   }
 }
 
 async function startServer() {
+  await loadState();
   const app = express();
 
   // Allow requests from GitHub Pages
@@ -238,8 +278,8 @@ async function startServer() {
   app.use(express.json());
 
   // GET State (Strip all passwords and secret PINs!)
-  app.get('/api/state', (_req, res) => {
-    syncCalendarWeekIfNeeded();
+  app.get('/api/state', async(_req, res) => {
+    await syncCalendarWeekIfNeeded();
 
     const sanitizedMembers = state.members.map((m) => ({
       ...m,
@@ -272,7 +312,7 @@ async function startServer() {
 
   // Connect to profile with Personal Password Protection
   // House code validated ONLY for first time password setup or new roommate!
-  app.post('/api/join-house', (req, res) => {
+  app.post('/api/join-house', async(req, res) => {
     const { code, memberId, name, password, avatarEmoji, deviceToken } = req.body;
 
     if (!password || password.trim().length < 2) {
@@ -360,14 +400,14 @@ async function startServer() {
       member = newMember;
     }
 
-    saveState();
+    await saveState();
 
     const sanitized = { ...member, password: undefined, hasPassword: true };
     return res.json({ success: true, member: sanitized, state, houseCode: state.houseCode });
   });
 
   // Admin sets or updates a housemate's password directly (NO activity log recorded!)
-  app.post('/api/admin-reset-password', (req, res) => {
+  app.post('/api/admin-reset-password',async(req, res) => {
     const { adminMemberId, targetMemberId, newPassword } = req.body;
     const adminUser = state.members.find((m) => m.id === adminMemberId && m.isAdmin);
     if (!adminUser) {
@@ -384,7 +424,7 @@ async function startServer() {
     }
 
     member.password = newPassword.trim();
-    saveState();
+    await saveState();
 
     return res.json({
       success: true,
@@ -394,7 +434,7 @@ async function startServer() {
   });
 
   // Complete Task (Strict: ONLY assigned person can complete)
-  app.post('/api/complete-task', (req, res) => {
+  app.post('/api/complete-task', async(req, res) => {
     const { taskType, department, memberId } = req.body;
     const member = state.members.find((m) => m.id === memberId);
     if (!member) {
@@ -430,7 +470,7 @@ async function startServer() {
         taskId: `cleaning_${department}`,
       });
 
-      saveState();
+      await saveState();
       return res.json({ success: true, state });
     }
 
@@ -464,7 +504,7 @@ async function startServer() {
         taskId: 'trash',
       });
 
-      saveState();
+      await saveState();
       return res.json({ success: true, state });
     }
 
@@ -472,7 +512,7 @@ async function startServer() {
   });
 
   // Undo task completion & delete from activity log
-  app.post('/api/undo-task', (req, res) => {
+  app.post('/api/undo-task', async(req, res) => {
     const { taskType, department, memberId } = req.body;
 
     if (taskType === 'cleaning') {
@@ -493,7 +533,7 @@ async function startServer() {
         (item) => !(item.type === 'cleaning_completed' && item.taskId === `cleaning_${department}`)
       );
 
-      saveState();
+      await saveState();
       return res.json({ success: true, state });
     }
 
@@ -513,7 +553,7 @@ async function startServer() {
         (item) => !(item.type === 'trash_completed' && item.taskId === 'trash')
       );
 
-      saveState();
+      await saveState();
       return res.json({ success: true, state });
     }
 
@@ -521,7 +561,7 @@ async function startServer() {
   });
 
   // Submit Missed Task Reason (+1 added immediately, status: pending_ai_review)
-  app.post('/api/submit-missed-reason', (req, res) => {
+  app.post('/api/submit-missed-reason', async(req, res) => {
     const { department, reason, memberId } = req.body;
     if (!department || !reason || !reason.trim()) {
       return res.status(400).json({ error: 'Department and reason are required.' });
@@ -603,13 +643,13 @@ async function startServer() {
       timestamp: new Date().toISOString(),
     });
 
-    saveState();
+    await saveState();
     return res.json({ success: true, state, reasonItem });
   });
 
   // AI Review Message / Question (Admin replies disguised as AI, or roommate answers AI)
   // Chat is strictly kept in the review thread and NOT spammed into activity stream!
-  app.post('/api/ai-review/reply', (req, res) => {
+  app.post('/api/ai-review/reply', async(req, res) => {
     const { reasonId, text, memberId } = req.body;
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Message cannot be empty.' });
@@ -659,12 +699,12 @@ async function startServer() {
       return res.status(403).json({ error: 'Not authorized to reply to this AI review.' });
     }
 
-    saveState();
+    await saveState();
     return res.json({ success: true, reasonItem, state });
   });
 
   // Admin AI Decision: Validates reason (Approve deducts 1, Disapprove keeps +1)
-  app.post('/api/validate-reason', (req, res) => {
+  app.post('/api/validate-reason', async(req, res) => {
     const { reasonId, valid, memberId, aiVerdictNotes } = req.body;
     const adminUser = state.members.find((m) => m.id === memberId && m.isAdmin);
     if (!adminUser) {
@@ -745,12 +785,12 @@ async function startServer() {
       });
     }
 
-    saveState();
+    await saveState();
     return res.json({ success: true, state, reasonItem });
   });
 
   // Admin adds a new roommate directly
-  app.post('/api/add-member', (req, res) => {
+  app.post('/api/add-member', async(req, res) => {
     const { name, memberId, avatarEmoji } = req.body;
     const adminUser = state.members.find((m) => m.id === memberId && m.isAdmin);
     if (!adminUser) {
@@ -790,12 +830,12 @@ async function startServer() {
       timestamp: new Date().toISOString(),
     });
 
-    saveState();
+    await saveState();
     return res.json({ success: true, member: newMember, state });
   });
 
   // Admin removes a person
-  app.post('/api/remove-member', (req, res) => {
+  app.post('/api/remove-member', async(req, res) => {
     const { targetMemberId, memberId } = req.body;
     const adminUser = state.members.find((m) => m.id === memberId && m.isAdmin);
     if (!adminUser) {
@@ -835,12 +875,12 @@ async function startServer() {
       timestamp: new Date().toISOString(),
     });
 
-    saveState();
+    await saveState();
     return res.json({ success: true, state });
   });
 
   // Roommate updates their own name or avatar emoji
-  app.post('/api/update-profile', (req, res) => {
+  app.post('/api/update-profile', async(req, res) => {
     const { memberId, name, avatarEmoji } = req.body;
     if (!memberId) {
       return res.status(400).json({ error: 'Member ID is required.' });
@@ -898,12 +938,12 @@ async function startServer() {
       });
     }
 
-    saveState();
+    await saveState();
     return res.json({ success: true, member, state });
   });
 
   // Admin updates House Security Code or settings (including trash interval)
-  app.post('/api/update-config', (req, res) => {
+  app.post('/api/update-config', async(req, res) => {
     const { memberId, newHouseCode, newHouseName, members, trashIntervalDays } = req.body;
     const adminUser = state.members.find((m) => m.id === memberId && m.isAdmin);
     if (!adminUser) {
@@ -933,12 +973,12 @@ async function startServer() {
       });
     }
 
-    saveState();
+    await saveState();
     return res.json({ success: true, state });
   });
 
   // Advance Cleaning Week
-  app.post('/api/advance-week', (req, res) => {
+  app.post('/api/advance-week', async(req, res) => {
     const { memberId } = req.body;
     const adminUser = state.members.find((m) => m.id === memberId && m.isAdmin);
     if (!adminUser) {
@@ -993,7 +1033,7 @@ async function startServer() {
       timestamp: new Date().toISOString(),
     });
 
-    saveState();
+    await saveState();
     return res.json({ success: true, state });
   });
 
