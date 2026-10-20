@@ -1,5 +1,4 @@
 import express from 'express';
-const app = express();
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -213,6 +212,29 @@ function syncCalendarWeekIfNeeded() {
 
 async function startServer() {
   const app = express();
+
+  // Allow requests from GitHub Pages
+  app.use((req, res, next) => {
+    res.header(
+      'Access-Control-Allow-Origin',
+      'https://gunateja020.github.io'
+    );
+    res.header(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+    );
+    res.header(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization'
+    );
+
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+
+    next();
+  });
+
   app.use(express.json());
 
   // GET State (Strip all passwords and secret PINs!)
