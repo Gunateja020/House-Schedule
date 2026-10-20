@@ -1,0 +1,6 @@
+{
+  "name": "HouseClean & Trash Duty Tracker",
+  "description": "Weekly cleaning and trash rotation tracker with 2 teams, duty swap, browser notifications, device-bound access, and house code security.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

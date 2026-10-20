@@ -1,0 +1,89 @@
+{
+  "houseName": "Our House",
+  "houseCode": "HOUSE2026",
+  "adminMemberId": "m_guna",
+  "currentWeekNumber": 1,
+  "members": [
+    {
+      "id": "m_guna",
+      "name": "Gunateja",
+      "isAdmin": true,
+      "missedTasks": 0,
+      "avatarColor": "bg-emerald-500",
+      "avatarEmoji": "👑",
+      "joinedAt": "2026-10-17T22:30:00.000Z"
+    },
+    {
+      "id": "m_naveen",
+      "name": "Naveen",
+      "isAdmin": false,
+      "missedTasks": 0,
+      "avatarColor": "bg-indigo-500",
+      "avatarEmoji": "🚀",
+      "joinedAt": "2026-10-17T22:30:00.000Z"
+    },
+    {
+      "id": "m_aditya_m",
+      "name": "Aditya M",
+      "isAdmin": false,
+      "missedTasks": 0,
+      "avatarColor": "bg-amber-500",
+      "avatarEmoji": "🌟",
+      "joinedAt": "2026-10-17T22:30:00.000Z"
+    },
+    {
+      "id": "m_aditya",
+      "name": "Aditya",
+      "isAdmin": false,
+      "missedTasks": 0,
+      "avatarColor": "bg-rose-500",
+      "avatarEmoji": "🎯",
+      "joinedAt": "2026-10-17T22:30:00.000Z"
+    }
+  ],
+  "cleaningDuties": {
+    "washroom": {
+      "department": "washroom",
+      "assignedPersonId": "m_guna",
+      "status": "pending",
+      "completedAt": null,
+      "completedBy": null,
+      "missedReason": null,
+      "reasonValidated": false
+    },
+    "kitchen": {
+      "department": "kitchen",
+      "assignedPersonId": "m_naveen",
+      "status": "pending",
+      "completedAt": null,
+      "completedBy": null,
+      "missedReason": null,
+      "reasonValidated": false
+    }
+  },
+  "trashRotation": {
+    "order": [
+      "m_aditya_m",
+      "m_aditya",
+      "m_guna",
+      "m_naveen"
+    ],
+    "currentIndex": 0,
+    "currentAssignedPersonId": "m_aditya_m",
+    "lastThrownAt": "2026-10-17T12:00:00.000Z",
+    "lastThrownBy": "Aditya",
+    "thresholdDays": 4
+  },
+  "missedReasons": [],
+  "activityLog": [
+    {
+      "id": "act_init",
+      "type": "week_advanced",
+      "personId": "system",
+      "personName": "House Duty",
+      "title": "House Duty Tracker Active",
+      "details": "Weekly cleaning runs Sunday to Saturday. Circulates equally across all housemates without teams: Gunateja, Naveen, Aditya M, Aditya.",
+      "timestamp": "2026-10-18T00:00:00.000Z"
+    }
+  ]
+}
