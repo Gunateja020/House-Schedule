@@ -1,7 +1,9 @@
 import type { HouseState, HouseMember, Department, MissedReasonItem } from '../types.js';
 
+const API_BASE_URL = 'https://house-schedule.onrender.com';
+
 export async function fetchHouseState(): Promise<HouseState> {
-  const res = await fetch('/api/state');
+  const res = await fetch(`${API_BASE_URL}/api/state`);
   if (!res.ok) {
     throw new Error('Failed to load house state');
   }
@@ -17,7 +19,7 @@ export async function joinHouse(payload: {
   deviceToken: string;
   isAlreadyVerified?: boolean;
 }): Promise<{ success: boolean; member: HouseMember; state: HouseState; houseCode?: string }> {
-  const res = await fetch('/api/join-house', {
+  const res = await fetch(`${API_BASE_URL}/api/join-house`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -35,7 +37,7 @@ export async function completeTask(
   deviceToken: string,
   department?: Department
 ): Promise<{ success: boolean; state: HouseState }> {
-  const res = await fetch('/api/complete-task', {
+  const res = await fetch(`${API_BASE_URL}/api/complete-task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskType, department, memberId, deviceToken }),
@@ -53,7 +55,7 @@ export async function undoTask(
   deviceToken: string,
   department?: Department
 ): Promise<{ success: boolean; state: HouseState }> {
-  const res = await fetch('/api/undo-task', {
+  const res = await fetch(`${API_BASE_URL}/api/undo-task`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskType, department, memberId, deviceToken }),
@@ -71,7 +73,7 @@ export async function submitMissedReason(
   memberId: string,
   deviceToken: string
 ): Promise<{ success: boolean; state: HouseState; reasonItem: MissedReasonItem }> {
-  const res = await fetch('/api/submit-missed-reason', {
+  const res = await fetch(`${API_BASE_URL}/api/submit-missed-reason`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ department, reason, memberId, deviceToken }),
@@ -89,7 +91,7 @@ export async function validateReason(
   memberId: string,
   aiVerdictNotes?: string
 ): Promise<{ success: boolean; state: HouseState; reasonItem: MissedReasonItem }> {
-  const res = await fetch('/api/validate-reason', {
+  const res = await fetch(`${API_BASE_URL}/api/validate-reason`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reasonId, valid, memberId, aiVerdictNotes }),
@@ -106,7 +108,7 @@ export async function sendAiReviewReply(
   text: string,
   memberId: string
 ): Promise<{ success: boolean; reasonItem: MissedReasonItem; state: HouseState }> {
-  const res = await fetch('/api/ai-review/reply', {
+  const res = await fetch(`${API_BASE_URL}/api/ai-review/reply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ reasonId, text, memberId }),
@@ -121,7 +123,7 @@ export async function sendAiReviewReply(
 export async function fetchAdminPasswords(
   adminMemberId: string
 ): Promise<{ success: boolean; passwords: { id: string; name: string; password: string; hasPassword: boolean }[] }> {
-  const res = await fetch(`/api/admin/passwords?adminMemberId=${encodeURIComponent(adminMemberId)}`);
+  const res = await fetch(`${API_BASE_URL}/api/admin/passwords?adminMemberId=${encodeURIComponent(adminMemberId)}`);
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error || 'Failed to fetch passwords');
@@ -133,7 +135,7 @@ export async function removeMember(
   targetMemberId: string,
   memberId: string
 ): Promise<{ success: boolean; state: HouseState }> {
-  const res = await fetch('/api/remove-member', {
+  const res = await fetch(`${API_BASE_URL}/api/remove-member`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ targetMemberId, memberId }),
@@ -146,7 +148,7 @@ export async function removeMember(
 }
 
 export async function advanceWeek(memberId: string): Promise<{ success: boolean; state: HouseState }> {
-  const res = await fetch('/api/advance-week', {
+  const res = await fetch(`${API_BASE_URL}/api/advance-week`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ memberId }),
@@ -165,7 +167,7 @@ export async function updateConfig(payload: {
   trashIntervalDays?: number;
   members?: Partial<HouseMember>[];
 }): Promise<{ success: boolean; state: HouseState }> {
-  const res = await fetch('/api/update-config', {
+  const res = await fetch(`${API_BASE_URL}/api/update-config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -182,7 +184,7 @@ export async function addMember(
   memberId: string,
   avatarEmoji?: string
 ): Promise<{ success: boolean; member: HouseMember; state: HouseState }> {
-  const res = await fetch('/api/add-member', {
+  const res = await fetch(`${API_BASE_URL}/api/add-member`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, memberId, avatarEmoji }),
@@ -198,7 +200,7 @@ export async function requestPasswordReset(
   memberId: string,
   memberName: string
 ): Promise<{ success: boolean; message: string; state?: HouseState }> {
-  const res = await fetch('/api/forgot-password', {
+  const res = await fetch(`${API_BASE_URL}/api/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ memberId, memberName }),
@@ -216,7 +218,7 @@ export async function adminResetPassword(payload: {
   newPassword: string;
   requestId?: string;
 }): Promise<{ success: boolean; message: string; state: HouseState }> {
-  const res = await fetch('/api/admin-reset-password', {
+  const res = await fetch(`${API_BASE_URL}/api/admin-reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -233,7 +235,7 @@ export async function updateProfile(
   name: string,
   avatarEmoji?: string
 ): Promise<{ success: boolean; member: HouseMember; state: HouseState }> {
-  const res = await fetch('/api/update-profile', {
+  const res = await fetch(`${API_BASE_URL}/api/update-profile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ memberId, name, avatarEmoji }),
